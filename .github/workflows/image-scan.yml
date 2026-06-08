@@ -9,7 +9,9 @@ jobs:
     env:
       BUILD_JOB_NAME: GitHub-Actions
       BUILD_NUMBER: '${{ github.run_number }}'
+      IMAGE_NAME: 'my-app:${{ github.sha }}'
       REGISTRY_NAME: Docker Hub
+      AQUA_SCANNER_VERSION: 2603.4.5
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -27,7 +29,7 @@ jobs:
           docker images
       - name: Pull Aqua Scanner Image
         run: |
-          docker pull registry.aquasec.com/scanner:2603.4.5
+          docker pull registry.aquasec.com/scanner:${{ env.AQUA_SCANNER_VERSION }}
       - name: Create Report Directory
         run: |
           mkdir -p aqua-reports
@@ -35,9 +37,10 @@ jobs:
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ${{ github.workspace }}/aqua-reports:/aqua-reports \
             -e BUILD_JOB_NAME="${{ env.BUILD_JOB_NAME }}" \
             -e BUILD_NUMBER="${{ env.BUILD_NUMBER }}" \
-            registry.aquasec.com/scanner:2603.4.5 scan \
+            registry.aquasec.com/scanner:${{ env.AQUA_SCANNER_VERSION }} scan \
             "${{ env.IMAGE_NAME }}" \
             --local \
             --host "${{ secrets.AQUA_SERVER }}" \
@@ -46,8 +49,8 @@ jobs:
             --register \
             --no-verify \
             --show-negligible \
-            --htmlfile aqua-reports/out.html \
-            --jsonfile aqua-reports/out.json || exit 1
+            --htmlfile /aqua-reports/out.html \
+            --jsonfile /aqua-reports/out.json || exit 1
       - name: Upload Scan Reports
         uses: actions/upload-artifact@v4
         with:
