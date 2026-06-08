@@ -1,0 +1,55 @@
+name: Aqua Local Image Scan (SaaS)
+'on':
+  push:
+    branches:
+      - main
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_JOB_NAME: GitHub-Actions
+      BUILD_NUMBER: '${{ github.run_number }}'
+      REGISTRY_NAME: Docker Hub
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Login to Aqua Registry
+        run: >
+          echo "${{ secrets.AQUA_REGISTRY_PASSWORD }}" | docker login
+          registry.aquasec.com \
+            -u "${{ secrets.AQUA_REGISTRY_USERNAME }}" \
+            --password-stdin
+      - name: Build Local Image
+        run: |
+          docker build -t my-app:${{ github.sha }} .
+      - name: List Local Images
+        run: |
+          docker images
+      - name: Pull Aqua Scanner Image
+        run: |
+          docker pull registry.aquasec.com/scanner:2603.4.5
+      - name: Create Report Directory
+        run: |
+          mkdir -p aqua-reports
+      - name: Scan Local Image in Aqua
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -e BUILD_JOB_NAME="${{ env.BUILD_JOB_NAME }}" \
+            -e BUILD_NUMBER="${{ env.BUILD_NUMBER }}" \
+            registry.aquasec.com/scanner:2603.4.5 scan \
+            "${{ env.IMAGE_NAME }}" \
+            --local \
+            --host "${{ secrets.AQUA_SERVER }}" \
+            --token "${{ secrets.AQUA_SCANNER_TOKEN }}" \
+            --registry "${{ env.REGISTRY_NAME }}" \
+            --register \
+            --no-verify \
+            --show-negligible \
+            --htmlfile aqua-reports/out.html \
+            --jsonfile aqua-reports/out.json || exit 1
+      - name: Upload Scan Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: AquaScanReports
+          path: aqua-reports/*
